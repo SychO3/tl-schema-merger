@@ -1,11 +1,45 @@
-boolFalse#bc799737 = Bool;
-boolTrue#997275b5 = Bool;
+// Merged TL schema — layer 223
+// Generated: 2026-03-25 17:12:17 UTC
+// Sources:
+//   tdlib:    https://raw.githubusercontent.com/tdlib/td/refs/heads/master/td/generate/scheme/telegram_api.tl
+//   tdesktop: https://raw.githubusercontent.com/telegramdesktop/tdesktop/refs/heads/dev/Telegram/SourceFiles/mtproto/scheme/api.tl
+
+int ? = Int;
+long ? = Long;
+double ? = Double;
+string ? = String;
+
+bytes = Bytes;
+int256 = Int256;
 
 true#3fedd339 = True;
+
+boolFalse#bc799737 = Bool;
+boolTrue#997275b5 = Bool;
 
 vector#1cb5c415 {t:Type} # [ t ] = Vector t;
 
 error#c4b9f9bb code:int text:string = Error;
+
+ipPort#d433ad73 ipv4:int port:int = IpPort;
+ipPortSecret#37982646 ipv4:int port:int secret:bytes = IpPort;
+accessPointRule#4679b65f phone_prefix_rules:string dc_id:int ips:vector<IpPort> = AccessPointRule;
+help.configSimple#5a592a6c date:int expires:int rules:vector<AccessPointRule> = help.ConfigSimple;
+
+inputPeerPhotoFileLocationLegacy#27d69997 flags:# big:flags.0?true peer:InputPeer volume_id:long local_id:int = InputFileLocation;
+inputStickerSetThumbLegacy#dbaeae9 stickerset:InputStickerSet volume_id:long local_id:int = InputFileLocation;
+
+---functions---
+
+test.useConfigSimple = help.ConfigSimple;
+test.parseInputAppEvent = InputAppEvent;
+
+invokeWithBusinessConnectionPrefix#dd289f8e connection_id:string = Error;
+invokeWithGooglePlayIntegrityPrefix#1df92984 nonce:string token:string = Error;
+invokeWithApnsSecretPrefix#0dae54f8 nonce:string secret:string = Error;
+invokeWithReCaptchaPrefix#adbb0f94 token:string = Error;
+
+---types---
 
 null#56730bcc = Null;
 
