@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 0 * * *"   # every day at 00:00 UTC
   workflow_dispatch:       # allow manual trigger
+  push:
+    branches: [master]
+    paths: [main.py]       # only when the merge script itself changes
 
 permissions:
   contents: write
