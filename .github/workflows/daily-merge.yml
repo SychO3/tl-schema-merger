@@ -1,0 +1,86 @@
+name: Daily TL Schema Merge
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # every day at 00:00 UTC
+  workflow_dispatch:       # allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  merge-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Record old checksum
+        id: old
+        run: |
+          if [ -f merged.tl ]; then
+            echo "hash=$(sha256sum merged.tl | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "hash=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run merge script
+        run: python main.py -o merged.tl 2> merge-report.txt
+
+      - name: Detect changes
+        id: check
+        run: |
+          NEW_HASH=$(sha256sum merged.tl | cut -d' ' -f1)
+          if [ "${{ steps.old.outputs.hash }}" = "$NEW_HASH" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected!"
+          fi
+
+          LAYER=$(grep '// LAYER' merged.tl | grep -o '[0-9]\+' || echo "0")
+          echo "layer=$LAYER" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          LAYER="${{ steps.check.outputs.layer }}"
+          {
+            echo "Auto-merged TL schema from [tdlib](https://github.com/tdlib/td) and [tdesktop](https://github.com/telegramdesktop/tdesktop)."
+            echo ""
+            echo '```'
+            cat merge-report.txt
+            echo '```'
+          } > release-notes.md
+
+      - name: Commit, tag and release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LAYER="${{ steps.check.outputs.layer }}"
+          TAG="layer-${LAYER}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add merged.tl
+          git commit -m "Update merged schema to layer ${LAYER}"
+
+          # If same layer tag already exists, remove the old release and tag
+          gh release delete "$TAG" --yes              2>/dev/null || true
+          git tag -d "$TAG"                           2>/dev/null || true
+          git push origin ":refs/tags/${TAG}"         2>/dev/null || true
+
+          git tag "$TAG"
+          git push origin HEAD --tags
+
+          gh release create "$TAG" merged.tl \
+            --title "Layer ${LAYER}" \
+            --notes-file release-notes.md
