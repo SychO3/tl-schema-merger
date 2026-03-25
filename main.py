@@ -8,6 +8,7 @@ import re
 import sys
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 TDLIB_URL = (
     "https://raw.githubusercontent.com/tdlib/td/refs/heads/master/"
@@ -28,7 +29,6 @@ class TLEntry:
     params_raw: str
     full_line: str
     section: str
-    is_preamble: bool = False
 
 
 @dataclass
@@ -47,30 +47,34 @@ def fetch_content(source: str) -> str:
         return f.read()
 
 
-def parse_tl_schema(
-    text: str, *, detect_preamble: bool = False
-) -> list[TLEntry]:
-    """Parse a TL schema file into combinator entries.
+def extract_preamble(text: str) -> tuple[list[str], set[str]]:
+    """Extract raw preamble lines from tdlib (everything before the first
+    ``---types---``) and collect combinator names that appear in them."""
+    raw_lines: list[str] = []
+    names: set[str] = set()
+    for line in text.splitlines():
+        if line.strip() == "---types---":
+            break
+        raw_lines.append(line)
+        m = COMBINATOR_RE.match(line.strip())
+        if m:
+            names.add(m.group(1))
+    while raw_lines and not raw_lines[-1].strip():
+        raw_lines.pop()
+    return raw_lines, names
 
-    When *detect_preamble* is True (tdlib), every entry that appears before the
-    first ``---types---`` divider is tagged ``is_preamble=True`` so the merger
-    can exclude it from additions while still using it for cross-reference.
-    """
+
+def parse_tl_schema(text: str) -> list[TLEntry]:
+    """Parse a TL schema file into combinator entries."""
     entries: list[TLEntry] = []
     current_section = "types"
-    in_preamble = detect_preamble
-    preamble_ended = False
 
     for line in text.splitlines():
         stripped = line.strip()
 
         if stripped == "---types---":
             current_section = "types"
-            if in_preamble:
-                in_preamble = False
-                preamble_ended = True
             continue
-
         if stripped == "---functions---":
             current_section = "functions"
             continue
@@ -84,13 +88,8 @@ def parse_tl_schema(
                     params_raw=m.group(3),
                     full_line=stripped,
                     section=current_section,
-                    is_preamble=in_preamble,
                 )
             )
-
-    if detect_preamble and not preamble_ended:
-        for e in entries:
-            e.is_preamble = False
 
     return entries
 
@@ -137,9 +136,6 @@ def merge_schemas(
     common_count = 0
 
     for entry in tdlib_entries:
-        if entry.is_preamble:
-            continue
-
         if entry.name in td_by_name:
             existing = td_by_name[entry.name]
             if existing.crc == entry.crc:
@@ -168,29 +164,59 @@ def merge_schemas(
     )
 
 
-def build_merged_output(tdesktop_text: str, result: MergeResult) -> str:
-    """Reconstruct merged schema using tdesktop text as the skeleton."""
-    lines = tdesktop_text.splitlines()
+def build_merged_output(
+    tdesktop_text: str,
+    result: MergeResult,
+    preamble_lines: list[str],
+    preamble_names: set[str],
+    *,
+    tdlib_source: str,
+    tdesktop_source: str,
+    layer: str,
+) -> str:
+    """Reconstruct merged schema: tdlib preamble + tdesktop body (deduped)."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    header = [
+        f"// Merged TL schema — layer {layer}",
+        f"// Generated: {now}",
+        f"// Sources:",
+        f"//   tdlib:    {tdlib_source}",
+        f"//   tdesktop: {tdesktop_source}",
+        "",
+    ]
+
+    output: list[str] = header + list(preamble_lines)
+    output.append("")
+    output.append("---types---")
+    output.append("")
 
     replacements: dict[str, str] = {}
     for td_entry, _, winner in result.conflicts:
         if winner.full_line != td_entry.full_line:
             replacements[td_entry.name] = winner.full_line
 
-    add_types = [e for e in result.only_tdlib if e.section == "types"]
-    add_funcs = [e for e in result.only_tdlib if e.section == "functions"]
+    add_types = [
+        e for e in result.only_tdlib
+        if e.section == "types" and e.name not in preamble_names
+    ]
+    add_funcs = [
+        e for e in result.only_tdlib
+        if e.section == "functions" and e.name not in preamble_names
+    ]
     types_done = False
     funcs_done = False
 
-    output: list[str] = []
-
-    for line in lines:
+    for line in tdesktop_text.splitlines():
         stripped = line.strip()
 
         m = COMBINATOR_RE.match(stripped)
-        if m and m.group(1) in replacements:
-            output.append(replacements[m.group(1)])
-            continue
+        if m:
+            name = m.group(1)
+            if name in preamble_names:
+                continue
+            if name in replacements:
+                output.append(replacements[name])
+                continue
 
         if stripped == "---functions---" and not types_done and add_types:
             output.append("")
@@ -211,7 +237,13 @@ def build_merged_output(tdesktop_text: str, result: MergeResult) -> str:
         for entry in add_funcs:
             output.append(entry.full_line)
 
-    return "\n".join(output)
+    cleaned: list[str] = []
+    for line in output:
+        if not line.strip() and cleaned and not cleaned[-1].strip():
+            continue
+        cleaned.append(line)
+
+    return "\n".join(cleaned)
 
 
 def print_report(result: MergeResult) -> None:
@@ -287,14 +319,9 @@ def main() -> None:
     tdesktop_text = fetch_content(args.tdesktop)
 
     log("Parsing...")
-    tdlib_entries = parse_tl_schema(tdlib_text, detect_preamble=True)
+    tdlib_entries = parse_tl_schema(tdlib_text)
     tdesktop_entries = parse_tl_schema(tdesktop_text)
-
-    preamble_n = sum(1 for e in tdlib_entries if e.is_preamble)
-    log(
-        f"  tdlib:    {len(tdlib_entries) - preamble_n} main entries "
-        f"({preamble_n} preamble skipped)"
-    )
+    log(f"  tdlib:    {len(tdlib_entries)} entries")
     log(f"  tdesktop: {len(tdesktop_entries)} entries")
 
     log("Merging...")
@@ -304,7 +331,13 @@ def main() -> None:
     if args.diff_only:
         return
 
-    merged = build_merged_output(tdesktop_text, result)
+    preamble_lines, preamble_names = extract_preamble(tdlib_text)
+    layer_match = re.search(r"//\s*LAYER\s+(\d+)", tdesktop_text)
+    layer = layer_match.group(1) if layer_match else "unknown"
+    merged = build_merged_output(
+        tdesktop_text, result, preamble_lines, preamble_names,
+        tdlib_source=args.tdlib, tdesktop_source=args.tdesktop, layer=layer,
+    )
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(merged)
     log(f"Written to: {args.output}")
