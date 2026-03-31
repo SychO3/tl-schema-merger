@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: daily-merge
+  cancel-in-progress: false
+
 jobs:
   merge-and-release:
     runs-on: ubuntu-latest
@@ -69,20 +73,28 @@ jobs:
         run: |
           LAYER="${{ steps.check.outputs.layer }}"
           TAG="layer-${LAYER}"
+          BRANCH="${GITHUB_REF_NAME}"
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add merged.tl
-          git commit -m "Update merged schema to layer ${LAYER}"
+          git commit -m "Update merged schema to layer ${LAYER}" || {
+            echo "Nothing to commit."
+            exit 0
+          }
+
+          git fetch origin "$BRANCH"
+          git rebase "origin/$BRANCH"
 
           # If same layer tag already exists, remove the old release and tag
-          gh release delete "$TAG" --yes              2>/dev/null || true
-          git tag -d "$TAG"                           2>/dev/null || true
-          git push origin ":refs/tags/${TAG}"         2>/dev/null || true
+          gh release delete "$TAG" --yes      2>/dev/null || true
+          git tag -d "$TAG"                   2>/dev/null || true
+          git push origin ":refs/tags/${TAG}" 2>/dev/null || true
 
           git tag "$TAG"
-          git push origin HEAD --tags
+          git push origin HEAD:"$BRANCH"
+          git push origin "$TAG"
 
           gh release create "$TAG" merged.tl \
             --title "Layer ${LAYER}" \
