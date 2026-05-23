@@ -51,7 +51,11 @@ jobs:
             echo "Changes detected!"
           fi
 
-          LAYER=$(grep '// LAYER' merged.tl | grep -o '[0-9]\+' || echo "0")
+          LAYER=$(grep -E '^//[[:space:]]*LAYER[[:space:]]+[0-9]+\b' merged.tl | tail -n 1 | grep -oE '[0-9]+' || true)
+          if [ -z "$LAYER" ]; then
+            echo "Missing // LAYER marker in merged.tl; refusing to create a layer release."
+            exit 1
+          fi
           echo "layer=$LAYER" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release notes

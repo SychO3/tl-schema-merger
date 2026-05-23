@@ -164,6 +164,22 @@ def merge_schemas(
     )
 
 
+def extract_tdesktop_layer(tdesktop_text: str) -> str:
+    """Return the official layer marker from tdesktop's schema.
+
+    tdlib's schema does not carry a ``// LAYER N`` marker, so tdesktop is the
+    release authority for layer-numbered artifacts. If tdesktop ever omits the
+    marker, publishing a ``layer-*`` release would be misleading.
+    """
+    layer_match = re.search(r"(?m)^//\s*LAYER\s+(\d+)\b", tdesktop_text)
+    if not layer_match:
+        raise ValueError(
+            "Missing // LAYER marker in tdesktop schema; "
+            "refusing to generate a layer-numbered merge."
+        )
+    return layer_match.group(1)
+
+
 def build_merged_output(
     tdesktop_text: str,
     result: MergeResult,
@@ -332,8 +348,11 @@ def main() -> None:
         return
 
     preamble_lines, preamble_names = extract_preamble(tdlib_text)
-    layer_match = re.search(r"//\s*LAYER\s+(\d+)", tdesktop_text)
-    layer = layer_match.group(1) if layer_match else "unknown"
+    try:
+        layer = extract_tdesktop_layer(tdesktop_text)
+    except ValueError as exc:
+        log(str(exc))
+        raise SystemExit(1) from exc
     merged = build_merged_output(
         tdesktop_text, result, preamble_lines, preamble_names,
         tdlib_source=args.tdlib, tdesktop_source=args.tdesktop, layer=layer,

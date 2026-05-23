@@ -18,6 +18,8 @@ Both tdlib and tdesktop maintain their own copy of the Telegram API schema. They
    - **Same CRC + different name** — alias (e.g. Prefix variant), skip
 5. Outputs the merged schema using tdesktop's structure as the skeleton, preserving the `// LAYER` marker
 
+`tdlib`'s schema file does not include a `// LAYER N` marker. The release layer is therefore taken from `tdesktop` only. If `tdesktop` ever omits the marker, the merge fails instead of publishing a misleading `layer-0` or `layer-unknown` release.
+
 ## Usage
 
 No external dependencies — pure Python standard library.
