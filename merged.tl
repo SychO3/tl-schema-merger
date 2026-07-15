@@ -1,5 +1,5 @@
 // Merged TL schema — layer 228
-// Generated: 2026-07-14 02:49:13 UTC
+// Generated: 2026-07-15 02:47:48 UTC
 // Sources:
 //   tdlib:    https://raw.githubusercontent.com/tdlib/td/refs/heads/master/td/generate/scheme/telegram_api.tl
 //   tdesktop: https://raw.githubusercontent.com/telegramdesktop/tdesktop/refs/heads/dev/Telegram/SourceFiles/mtproto/scheme/api.tl
@@ -2284,6 +2284,7 @@ messages.translatedRichMessage#4203998f result:Vector<RichMessage> = messages.Tr
 
 messages.composedRichMessageWithAI#4c4537c8 result:RichMessage = messages.ComposedRichMessageWithAI;
 
+updateEphemeralBotCallbackQuery#9b380762 query_id:long user_id:long peer:Peer msg_id:int data:bytes message:EphemeralMessage = Update;
 ---functions---
 
 invokeAfterMsg#cb9f372d {X:Type} msg_id:long query:!X = X;
@@ -3117,5 +3118,7 @@ ephemeral.sendMessage#68cbd09f flags:# peer:InputPeer receiver_id:InputUser quer
 ephemeral.deleteMessage#a3c0d511 peer:InputPeer receiver_id:InputUser id:int = Bool;
 ephemeral.reportMessage#8704f2bf peer:InputPeer id:int option:bytes message:string = ReportResult;
 ephemeral.getCallbackAnswer#3fa464c8 flags:# peer:InputPeer id:int data:flags.1?bytes = messages.BotCallbackAnswer;
+
+ephemeral.editMessage#13f250ee flags:# peer:InputPeer receiver_id:InputUser id:int message:flags.0?string media:flags.3?InputMedia entities:flags.1?Vector<MessageEntity> reply_markup:flags.2?ReplyMarkup = Updates;
 
 // LAYER 228
