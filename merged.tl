@@ -1,5 +1,5 @@
 // Merged TL schema — layer 229
-// Generated: 2026-09-25 04:14:42 UTC
+// Generated: 2026-09-26 04:19:05 UTC
 // Sources:
 //   tdlib:    https://raw.githubusercontent.com/tdlib/td/refs/heads/master/td/generate/scheme/telegram_api.tl
 //   tdesktop: https://raw.githubusercontent.com/telegramdesktop/tdesktop/refs/heads/dev/Telegram/SourceFiles/mtproto/scheme/api.tl
